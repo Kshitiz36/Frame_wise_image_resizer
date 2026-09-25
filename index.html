@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Framewise — Resize, Enhance & Convert Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#0E1013;
+    --panel:#15181D;
+    --panel-2:#1C2028;
+    --paper:#F4F3EF;
+    --line:#2A2F38;
+    --accent:#FF5A3C;
+    --accent-dim:#5C2A1F;
+    --accent-pink:#FF4FA3;
+    --accent-grad:linear-gradient(90deg, #FF4D6D, #FF8A3D);
+    --amber:#FF9F43;
+    --red:#FF6B6B;
+    --text:#E9E8E3;
+    --text-dim:#9A9DA6;
+    --mono:'IBM Plex Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--ink); color:var(--text); font-family:var(--display); min-height:100vh;}
+  .bg-glow{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(ellipse 60% 40% at 15% -10%, rgba(255,77,109,0.22), transparent 60%),
+      radial-gradient(ellipse 55% 40% at 95% 5%, rgba(255,138,61,0.16), transparent 60%),
+      radial-gradient(ellipse 50% 35% at 50% 100%, rgba(255,79,163,0.12), transparent 60%);
+  }
+  .bg-grid{
+    position:fixed; inset:0; z-index:0; opacity:0.35;
+    background-image:linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:28px 28px;
+    mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+  }
+  .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:40px 24px 80px;}
+  header{margin-bottom:28px;}
+  .mark{display:inline-flex; align-items:center; gap:10px; font-family:var(--mono); font-size:13px; color:var(--accent-pink); letter-spacing:0.02em; margin-bottom:14px;}
+  .mark .dot{width:8px; height:8px; background:var(--accent-grad); border-radius:1px; animation:blink 1.6s infinite;}
+  @keyframes blink{0%,100%{opacity:1;} 50%{opacity:0.25;}}
+  h1{font-size:clamp(30px, 4.5vw, 44px); line-height:1.05; margin:0 0 10px; font-weight:700; letter-spacing:-0.02em; max-width:640px;}
+  header p{color:var(--text-dim); max-width:560px; line-height:1.55; font-size:15px; margin:0;}
+
+  /* Working image card */
+  .work-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:18px 20px;
+    display:flex; align-items:center; gap:18px; margin-bottom:20px; flex-wrap:wrap;
+  }
+  .thumb{
+    width:64px; height:64px; border-radius:3px; background:var(--panel-2); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; overflow:hidden; flex:none;
+  }
+  .thumb img{width:100%; height:100%; object-fit:cover;}
+  .thumb .ph{font-family:var(--mono); font-size:10px; color:var(--text-dim);}
+  .work-info{flex:1; min-width:180px;}
+  .work-info .fname{font-family:var(--mono); font-size:13px; color:var(--text); margin-bottom:3px; word-break:break-all;}
+  .work-info .fmeta{font-family:var(--mono); font-size:11.5px; color:var(--text-dim);}
+  .work-actions{display:flex; gap:10px;}
+  .btn-ghost{
+    padding:9px 16px; background:transparent; border:1px solid var(--line); color:var(--text);
+    border-radius:3px; font-family:var(--mono); font-size:12.5px; cursor:pointer; transition:border-color .15s, color .15s;
+  }
+  .btn-ghost:hover{border-color:var(--accent); color:var(--accent);}
+  #global-file{display:none;}
+  .work-empty{
+    border:1.5px dashed var(--line); border-radius:4px; padding:30px; text-align:center; cursor:pointer;
+    width:100%; transition:border-color .15s, background .15s;
+  }
+  .work-empty:hover, .work-empty.drag{border-color:var(--accent); background:var(--panel-2);}
+  .work-empty .icon{font-family:var(--mono); font-size:22px; color:var(--text-dim); margin-bottom:8px;}
+  .work-empty .hint{font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+
+  .layout{display:grid; grid-template-columns:190px 1fr 340px; gap:20px;}
+  @media (max-width:960px){ .layout{grid-template-columns:1fr;} }
+
+  .tabs{display:flex; flex-direction:column; gap:6px;}
+  .tab{display:flex; align-items:center; gap:10px; padding:13px 14px; border-radius:3px; cursor:pointer; border:1px solid transparent; background:transparent; color:var(--text-dim); font-family:var(--mono); font-size:12.5px; transition:background .15s, color .15s, border-color .15s; text-align:left;}
+  .tab .sq{width:10px; height:10px; border:1.5px solid var(--text-dim); flex:none;}
+  .tab:hover{color:var(--text); background:var(--panel);}
+  .tab.active{color:var(--accent); background:var(--panel-2); border-color:var(--accent-dim);}
+  .tab.active .sq{background:var(--accent); border-color:var(--accent);}
+  @media (max-width:960px){ .tabs{flex-direction:row; flex-wrap:wrap;} .tab{flex:1 1 auto; justify-content:center;} }
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:26px; min-height:400px;}
+  .panel-view{display:none;}
+  .panel-view.active{display:block;}
+
+  .section-title{font-family:var(--mono); font-size:11px; color:var(--accent); letter-spacing:0.05em; margin:22px 0 12px; text-transform:uppercase;}
+  .section-title:first-child{margin-top:0;}
+
+  .preset-cat{font-family:var(--mono); font-size:10.5px; color:var(--text-dim); margin:16px 0 8px; text-transform:uppercase; letter-spacing:0.04em;}
+  .preset-cat:first-child{margin-top:0;}
+  .preset-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:8px; margin-bottom:6px;}
+  .preset-chip{
+    border:1px solid var(--line); background:var(--ink); border-radius:3px; padding:10px 11px; cursor:pointer;
+    text-align:left; transition:border-color .15s, background .15s;
+  }
+  .preset-chip:hover{border-color:var(--accent-dim);}
+  .preset-chip.active{border-color:var(--accent); background:var(--panel-2);}
+  .preset-chip .pname{font-family:var(--display); font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:3px;}
+  .preset-chip .pdim{font-family:var(--mono); font-size:10.5px; color:var(--text-dim);}
+  .preset-chip.active .pname{color:var(--accent);}
+
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
+  @media (max-width:600px){ .row2, .row3{grid-template-columns:1fr;} }
+
+  label.field-label{font-family:var(--mono); font-size:11.5px; color:var(--text-dim); margin-bottom:6px; display:block;}
+  input[type=text], input[type=number], select{
+    width:100%; background:var(--ink); border:1px solid var(--line); color:var(--text); padding:10px 12px;
+    border-radius:3px; font-family:var(--mono); font-size:13px; margin-bottom:14px;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--accent);}
+  input[type=color]{width:100%; height:38px; background:var(--ink); border:1px solid var(--line); border-radius:3px; padding:3px; margin-bottom:14px; cursor:pointer;}
+
+  .lockrow{display:flex; align-items:center; gap:8px; margin:-6px 0 16px;}
+  .lockrow input[type=checkbox]{accent-color:var(--accent); width:14px; height:14px;}
+  .lockrow label{font-family:var(--mono); font-size:11.5px; color:var(--text-dim); cursor:pointer;}
+
+  .slider-row{margin-bottom:16px;}
+  .slider-row .slabel{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11.5px; color:var(--text-dim); margin-bottom:6px;}
+  .slider-row .sval{color:var(--accent);}
+  input[type=range]{width:100%; accent-color:var(--accent); height:4px;}
+
+  .fitmode{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .fitmode button{
+    flex:1; min-width:90px; padding:9px 8px; background:var(--ink); border:1px solid var(--line); color:var(--text-dim);
+    border-radius:3px; font-family:var(--mono); font-size:11.5px; cursor:pointer; transition:.15s;
+  }
+  .fitmode button.active{border-color:var(--accent); color:var(--accent); background:var(--panel-2);}
+
+  .notice{font-family:var(--mono); font-size:12.5px; line-height:1.6; padding:12px 14px; border-radius:3px; margin-bottom:16px; border:1px solid var(--line);}
+  .notice.info{color:var(--text-dim); background:var(--panel-2);}
+  .notice.warn{color:var(--amber); border-color:#4a3a1c; background:#211c10;}
+  .notice.error{color:var(--red); border-color:#4a1c1c; background:#211010;}
+
+  .gen-btn{width:100%; padding:14px; margin-top:6px; background:var(--accent-grad); color:#2B0D05; border:none; border-radius:3px; font-family:var(--mono); font-weight:600; font-size:13px; letter-spacing:0.03em; cursor:pointer; transition:transform .1s, filter .15s;}
+  .gen-btn:hover:not(:disabled){filter:brightness(1.1);}
+  .gen-btn:active:not(:disabled){transform:scale(0.98);}
+  .gen-btn:disabled{background:var(--line); color:var(--text-dim); cursor:not-allowed; filter:none;}
+  .gen-btn.secondary{background:transparent; border:1px solid var(--line); color:var(--text); margin-top:10px;}
+  .gen-btn.secondary:hover:not(:disabled){border-color:var(--accent); color:var(--accent);}
+
+  .checklist{display:flex; flex-direction:column; gap:6px; max-height:320px; overflow-y:auto; padding-right:4px; margin-bottom:16px;}
+  .check-item{display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line); border-radius:3px; background:var(--ink); cursor:pointer;}
+  .check-item input{accent-color:var(--accent); width:14px; height:14px;}
+  .check-item .cname{font-family:var(--display); font-size:12.5px; font-weight:600; flex:1;}
+  .check-item .cdim{font-family:var(--mono); font-size:10.5px; color:var(--text-dim);}
+  .selectall-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .selectall-row a{font-family:var(--mono); font-size:11.5px; color:var(--accent); cursor:pointer; text-decoration:none;}
+
+  .progress-wrap{margin-top:14px;}
+  .progress-bar{height:6px; background:var(--panel-2); border-radius:3px; overflow:hidden; border:1px solid var(--line);}
+  .progress-fill{height:100%; background:var(--accent-grad); width:0%; transition:width .2s;}
+  .progress-label{font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:6px; text-align:center;}
+
+  .preview{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:22px; display:flex; flex-direction:column; align-items:center; position:sticky; top:24px; height:fit-content;}
+  .preview-label{font-family:var(--mono); font-size:11px; color:var(--text-dim); align-self:flex-start; margin-bottom:10px;}
+  .preview-label.second{margin-top:20px;}
+  .canvas-stage{background:repeating-conic-gradient(#2a2f38 0% 25%, #232830 0% 50%) 0 0/16px 16px; padding:10px; border-radius:3px; width:100%; display:flex; align-items:center; justify-content:center; min-height:180px;}
+  #preview-canvas{max-width:100%; max-height:280px; display:block; border-radius:2px;}
+  .ph-text{font-family:var(--mono); font-size:12px; color:var(--text-dim); text-align:center; line-height:1.6;}
+  .preview-meta{font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:14px; text-align:center; line-height:1.8; width:100%;}
+  .preview-meta b{color:var(--text);}
+
+  /* Crop selector */
+  .crop-hint{font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-bottom:10px; line-height:1.5; width:100%;}
+  .crop-stage{position:relative; overflow:hidden; border-radius:3px; background:var(--ink); margin:0 auto; touch-action:none; cursor:grab;}
+  .crop-stage.dragging{cursor:grabbing;}
+  .crop-stage img{position:absolute; top:0; left:0; display:block; user-select:none; -webkit-user-drag:none; pointer-events:none;}
+  .crop-frame{
+    position:absolute; box-sizing:border-box;
+    border:2px solid var(--accent-pink);
+    box-shadow:0 0 0 2000px rgba(0,0,0,0.62);
+    background-image:
+      linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,0.4) calc(33.33% - 1px), rgba(255,255,255,0.4) calc(33.33% + 1px), transparent calc(33.33% + 1px), transparent calc(66.66% - 1px), rgba(255,255,255,0.4) calc(66.66% - 1px), rgba(255,255,255,0.4) calc(66.66% + 1px), transparent calc(66.66% + 1px)),
+      linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,0.4) calc(33.33% - 1px), rgba(255,255,255,0.4) calc(33.33% + 1px), transparent calc(33.33% + 1px), transparent calc(66.66% - 1px), rgba(255,255,255,0.4) calc(66.66% - 1px), rgba(255,255,255,0.4) calc(66.66% + 1px), transparent calc(66.66% + 1px));
+    cursor:move; touch-action:none;
+  }
+  .crop-zoom-row{width:100%; margin-top:12px;}
+  .crop-zoom-row .slabel{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11.5px; color:var(--text-dim); margin-bottom:6px;}
+  .crop-zoom-row .sval{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="bg-grid"></div>
+<div class="wrap">
+  <header>
+    <div class="mark"><span class="dot"></span>FRAMEWISE</div>
+    <h1>Resize, enhance, compress and convert — all in one place.</h1>
+    <p>Upload once. Pick a trending platform size or set your own, sharpen and tune it up, choose your output format, and export — one photo or every size at once.</p>
+  </header>
+
+  <div class="work-card" id="work-card">
+    <div class="work-empty" id="work-empty">
+      <div class="icon">▤</div>
+      <div class="hint">Click or drop a photo to get started — JPG, PNG, WebP</div>
+    </div>
+    <div id="work-loaded" style="display:none; align-items:center; gap:18px; width:100%; flex-wrap:wrap;">
+      <div class="thumb"><img id="work-thumb-img" alt=""></div>
+      <div class="work-info">
+        <div class="fname" id="work-fname"></div>
+        <div class="fmeta" id="work-fmeta"></div>
+      </div>
+      <div class="work-actions">
+        <button class="btn-ghost" id="change-photo-btn">Change photo</button>
+      </div>
+    </div>
+    <input type="file" id="global-file" accept="image/*">
+  </div>
+
+  <div class="layout">
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="resize"><span class="sq"></span>Resize &amp; Enhance</button>
+      <button class="tab" data-tab="batch"><span class="sq"></span>Batch Export</button>
+      <button class="tab" data-tab="compress"><span class="sq"></span>Compress</button>
+      <button class="tab" data-tab="convert"><span class="sq"></span>Convert Format</button>
+    </nav>
+
+    <div class="panel">
+      <!-- RESIZE & ENHANCE -->
+      <div class="panel-view active" data-view="resize">
+        <div class="section-title">Trending sizes</div>
+        <div id="preset-container"></div>
+
+        <div class="section-title">Custom dimensions</div>
+        <div class="row2">
+          <div><label class="field-label">Width (px)</label><input type="number" id="cw" min="1" placeholder="e.g. 1080"></div>
+          <div><label class="field-label">Height (px)</label><input type="number" id="ch" min="1" placeholder="e.g. 1080"></div>
+        </div>
+        <div class="lockrow"><input type="checkbox" id="lock-aspect" checked><label for="lock-aspect">Lock aspect ratio</label></div>
+
+        <div class="section-title">Fit mode</div>
+        <div class="fitmode" id="fitmode">
+          <button class="active" data-fit="cover">Cover (crop to fill)</button>
+          <button data-fit="contain">Contain (pad)</button>
+          <button data-fit="stretch">Stretch</button>
+        </div>
+        <label class="field-label">Padding / background color</label>
+        <input type="color" id="bg-color" value="#0e1013">
+
+        <div class="section-title">Enhance</div>
+        <div class="slider-row">
+          <div class="slabel"><span>Sharpen</span><span class="sval" id="sharpen-val">0</span></div>
+          <input type="range" id="sharpen" min="0" max="100" value="0">
+        </div>
+        <div class="row3">
+          <div class="slider-row">
+            <div class="slabel"><span>Brightness</span><span class="sval" id="bright-val">0</span></div>
+            <input type="range" id="brightness" min="-50" max="50" value="0">
+          </div>
+          <div class="slider-row">
+            <div class="slabel"><span>Contrast</span><span class="sval" id="contrast-val">0</span></div>
+            <input type="range" id="contrast" min="-50" max="50" value="0">
+          </div>
+          <div class="slider-row">
+            <div class="slabel"><span>Saturation</span><span class="sval" id="saturate-val">0</span></div>
+            <input type="range" id="saturate" min="-50" max="50" value="0">
+          </div>
+        </div>
+        <label class="field-label">Upscale (smoothed enlargement, not AI)</label>
+        <select id="upscale"><option value="1">1× — no upscale</option><option value="2">2×</option><option value="4">4×</option></select>
+        <button class="gen-btn secondary" id="auto-enhance-btn">✦ Auto-enhance (one click)</button>
+
+        <div class="section-title">Output</div>
+        <div class="row2">
+          <div><label class="field-label">Format</label>
+            <select id="out-format"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select>
+          </div>
+          <div><label class="field-label">Quality</label>
+            <input type="range" id="out-quality" min="10" max="100" value="90">
+          </div>
+        </div>
+        <button class="gen-btn" id="resize-generate-btn" disabled>Render & preview</button>
+        <button class="gen-btn secondary" id="resize-download-btn" disabled>Download image</button>
+      </div>
+
+      <!-- BATCH EXPORT -->
+      <div class="panel-view" data-view="batch">
+        <div class="notice info">Uses the same enhance settings from the Resize &amp; Enhance tab. Each size is auto-cropped centered (the movable crop frame is specific to one aspect ratio at a time, so it doesn't carry over across a batch of different sizes). Pick as many trending sizes as you want and export them together as one ZIP.</div>
+        <div class="selectall-row">
+          <span class="section-title" style="margin:0;">Select sizes</span>
+          <a id="select-all-link">Select all</a>
+        </div>
+        <div class="checklist" id="batch-checklist"></div>
+        <label class="field-label">Format for all exports</label>
+        <select id="batch-format"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select>
+        <button class="gen-btn" id="batch-generate-btn" disabled>Generate ZIP</button>
+        <div class="progress-wrap" id="batch-progress" style="display:none;">
+          <div class="progress-bar"><div class="progress-fill" id="batch-progress-fill"></div></div>
+          <div class="progress-label" id="batch-progress-label"></div>
+        </div>
+      </div>
+
+      <!-- COMPRESS -->
+      <div class="panel-view" data-view="compress">
+        <div class="notice info">Automatically searches for the highest quality that still lands under your target file size. PNG is lossless, so it can't be quality-reduced — switch to JPEG or WebP for real compression.</div>
+        <label class="field-label">Target file size (KB)</label>
+        <input type="number" id="target-kb" min="5" placeholder="e.g. 150">
+        <label class="field-label">Output format</label>
+        <select id="compress-format"><option value="image/jpeg">JPEG</option><option value="image/webp">WebP</option><option value="image/png">PNG (no size control)</option></select>
+        <button class="gen-btn" id="compress-btn" disabled>Compress</button>
+        <div id="compress-status"></div>
+        <button class="gen-btn secondary" id="compress-download-btn" disabled>Download compressed image</button>
+      </div>
+
+      <!-- CONVERT FORMAT -->
+      <div class="panel-view" data-view="convert">
+        <div class="notice info">Swaps the file format only — dimensions stay the same as your uploaded photo. Converting a transparent PNG to JPEG will flatten it onto the background color below.</div>
+        <label class="field-label">Convert to</label>
+        <select id="convert-format"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select>
+        <label class="field-label">Quality (JPEG / WebP)</label>
+        <input type="range" id="convert-quality" min="10" max="100" value="92">
+        <label class="field-label">Flatten background color</label>
+        <input type="color" id="convert-bg" value="#ffffff">
+        <button class="gen-btn" id="convert-btn" disabled>Convert</button>
+        <button class="gen-btn secondary" id="convert-download-btn" disabled>Download converted image</button>
+      </div>
+    </div>
+
+    <div class="preview">
+      <div id="crop-section" style="display:none; width:100%;">
+        <div class="preview-label">CROP SELECTOR</div>
+        <div class="crop-hint">Drag the frame to choose what stays in the shot. Everything outside the dimmed area gets cut.</div>
+        <div class="crop-stage" id="crop-stage">
+          <img id="crop-image" alt="" draggable="false">
+          <div class="crop-frame" id="crop-frame"></div>
+        </div>
+        <div class="crop-zoom-row">
+          <div class="slabel"><span>Zoom / crop tightness</span><span class="sval" id="crop-zoom-val">1.0×</span></div>
+          <input type="range" id="crop-zoom" min="1" max="3" step="0.05" value="1">
+        </div>
+      </div>
+
+      <div class="preview-label second" id="result-label">LIVE PREVIEW</div>
+      <div class="canvas-stage">
+        <canvas id="preview-canvas" style="display:none;"></canvas>
+        <div class="ph-text" id="preview-placeholder">Upload a photo,<br>then render to preview here</div>
+      </div>
+      <div class="preview-meta" id="preview-meta"></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
